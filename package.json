@@ -1,6 +1,6 @@
 {
   "name": "docparse-fetch-imacros",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "fetch details about a pdf document using the sha1 hash value",
   "main": "index.js",
   "directories": {
