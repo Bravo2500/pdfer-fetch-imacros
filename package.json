@@ -1,0 +1,25 @@
+{
+  "name": "docparse-fetch-imacros",
+  "version": "0.0.0",
+  "description": "fetch details about a pdf document using the sha1 hash value",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/nisaacson/docparse-fetch-imacros.git"
+  },
+  "keywords": [
+    "docparse",
+    "fetch",
+    "pdfer"
+  ],
+  "author": "Noah Isaacson",
+  "license": "BSD",
+  "readmeFilename": "README.md",
+  "gitHead": "290a3dde9da18a3d829663dcaa58a8d13af33560"
+}
