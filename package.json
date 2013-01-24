@@ -1,6 +1,6 @@
 {
   "name": "docparse-fetch-imacros",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "fetch details about a pdf document using the sha1 hash value",
   "main": "index.js",
   "directories": {
@@ -21,5 +21,8 @@
   "author": "Noah Isaacson",
   "license": "BSD",
   "readmeFilename": "README.md",
-  "gitHead": "290a3dde9da18a3d829663dcaa58a8d13af33560"
+  "gitHead": "290a3dde9da18a3d829663dcaa58a8d13af33560",
+  "dependencies": {
+    "imacros-read-file": "~1.0.0"
+  }
 }
