@@ -11,17 +11,13 @@ runTests(function (err, reply) {
 });
 
 function runTests(cb) {
-  var filePath = 'file:///users/noah/src/node/docparse-scraper-skeleton/docparse-imacros/docparse-fetch-imacros/test/localConfig.json'
+  var filePath = 'file:///users/noah/src/node/docparse/scrapers/imacros/fetch/test/localConfig.json';
   loadConfigFile(filePath, function (err, config) {
-    should.not.exist(err, 'error loading config file')
-    async.series([
-      function (cb) {
-        fetchExistingDocument(config, cb);
-      },
-      function (cb) {
-        fetchNullDocument(config, cb);
-      },
-    ], cb)
+    should.not.exist(err, 'error loading config file');
+    fetchExistingDocument(config, function (err, reply) {
+      if (err) { return cb(err); }
+      fetchNullDocument(config, cb);
+    });
   });
 }
 
@@ -31,7 +27,7 @@ function fetchExistingDocument(config, cb) {
   var data = {
     config: config,
     hash: hash
-  }
+  };
   fetch(data, function (err, reply) {
     if (err) { return cb(err); }
     if (!reply.text_pages) {
@@ -47,7 +43,7 @@ function fetchNullDocument(config, cb) {
   var data = {
     config: config,
     hash: hash
-  }
+  };
   fetch(data, function (err, reply) {
     if (!err) {
       return cb('fetch api request did not through an error for an invalid hash value like it should have');

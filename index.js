@@ -28,11 +28,10 @@ function validateData(data, cb) {
 }
 function getURL(data) {
   var config = data.config;
-  var queryString = 'hash=' + encodeURIComponent(data.hash);
-  iimDisplay('built query string: ' +queryString);
+  var hash = data.hash;
   var url = 'http://'+config.pdfer.username + ':' + config.pdfer.password
         + '@'+config.pdfer.host + ':'+config.pdfer.port
-        + '/api/fetch?' + queryString;
+        + '/api/fetch/' + hash;
   return url;
 }
 function parseResponse(request, cb) {
@@ -42,18 +41,18 @@ function parseResponse(request, cb) {
     return cb('error fetching pdfer data, body: "Unauthorized"');
   }
 
-  var responseData = JSON.parse(body);
+  var resData = JSON.parse(body);
   var statusCode = request.status;
   if (statusCode !== 200) {
     iimDisplay('fetch failed, bad status code: ' + statusCode);
     return cb('error fetching data for hash, bad status code: ' + statusCode);
   }
-  if (!responseData.hasOwnProperty('text_pages')) {
+  if (!resData.hasOwnProperty('text_pages')) {
     iimDisplay('fetch reply missing "text_pages" field');
     return cb('fetch reply missing "text_pages" property');
   }
-  iimDisplay('fetch complete with result: ' + JSON.stringify(responseData.download));
-  cb(null, responseData);
+  iimDisplay('fetch complete with result: ' + JSON.stringify(resData.download));
+  cb(null, resData);
 }
 
 module.exports = function(data, cb) {
@@ -78,4 +77,4 @@ module.exports = function(data, cb) {
     iimDisplay('parsing fetch response: ' + request.response);
     parseResponse(request, cb);
   });
-}
+};

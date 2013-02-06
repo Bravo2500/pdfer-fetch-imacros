@@ -1,6 +1,6 @@
 {
   "name": "pdfer-fetch-imacros",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "fetch details about a pdf document using the sha1 hash value",
   "main": "index.js",
   "directories": {

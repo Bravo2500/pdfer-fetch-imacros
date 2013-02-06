@@ -391,35 +391,35 @@ process.binding = function (name) {
 
 });
 
-require.define("/node_modules/async/package.json",function(require,module,exports,__dirname,__filename,process,global){module.exports = {"main":"./index"}
+require.define("/node_modules/async/package.json",function(require,module,exports,__dirname,__filename,process,global){module.exports = {"main":"./lib/async"}
 });
 
-require.define("/node_modules/async/index.js",function(require,module,exports,__dirname,__filename,process,global){// This file is just added for convenience so this repository can be
-// directly checked out into a project's deps folder
-module.exports = require('./lib/async');
-
-});
-
-require.define("/node_modules/async/lib/async.js",function(require,module,exports,__dirname,__filename,process,global){/*global setTimeout: false, console: false */
+require.define("/node_modules/async/lib/async.js",function(require,module,exports,__dirname,__filename,process,global){/*global setImmediate: false, setTimeout: false, console: false */
 (function () {
 
     var async = {};
 
     // global on the server, window in the browser
-    var root = this,
-        previous_async = root.async;
+    var root, previous_async;
 
-    if (typeof module !== 'undefined' && module.exports) {
-        module.exports = async;
-    }
-    else {
-        root.async = async;
+    root = this;
+    if (root != null) {
+      previous_async = root.async;
     }
 
     async.noConflict = function () {
         root.async = previous_async;
         return async;
     };
+
+    function only_once(fn) {
+        var called = false;
+        return function() {
+            if (called) throw new Error("Callback was already called.");
+            called = true;
+            fn.apply(root, arguments);
+        }
+    }
 
     //// cross-browser compatiblity functions ////
 
@@ -470,9 +470,16 @@ require.define("/node_modules/async/lib/async.js",function(require,module,export
 
     //// nextTick implementation with browser-compatible fallback ////
     if (typeof process === 'undefined' || !(process.nextTick)) {
-        async.nextTick = function (fn) {
-            setTimeout(fn, 0);
-        };
+        if (typeof setImmediate === 'function') {
+            async.nextTick = function (fn) {
+                setImmediate(fn);
+            };
+        }
+        else {
+            async.nextTick = function (fn) {
+                setTimeout(fn, 0);
+            };
+        }
     }
     else {
         async.nextTick = process.nextTick;
@@ -485,18 +492,18 @@ require.define("/node_modules/async/lib/async.js",function(require,module,export
         }
         var completed = 0;
         _forEach(arr, function (x) {
-            iterator(x, function (err) {
+            iterator(x, only_once(function (err) {
                 if (err) {
                     callback(err);
                     callback = function () {};
                 }
                 else {
                     completed += 1;
-                    if (completed === arr.length) {
+                    if (completed >= arr.length) {
                         callback(null);
                     }
                 }
-            });
+            }));
         });
     };
 
@@ -507,6 +514,7 @@ require.define("/node_modules/async/lib/async.js",function(require,module,export
         }
         var completed = 0;
         var iterate = function () {
+            var sync = true;
             iterator(arr[completed], function (err) {
                 if (err) {
                     callback(err);
@@ -514,53 +522,67 @@ require.define("/node_modules/async/lib/async.js",function(require,module,export
                 }
                 else {
                     completed += 1;
-                    if (completed === arr.length) {
+                    if (completed >= arr.length) {
                         callback(null);
                     }
                     else {
-                        iterate();
+                        if (sync) {
+                            async.nextTick(iterate);
+                        }
+                        else {
+                            iterate();
+                        }
                     }
                 }
             });
+            sync = false;
         };
         iterate();
     };
 
     async.forEachLimit = function (arr, limit, iterator, callback) {
-        callback = callback || function () {};
-        if (!arr.length || limit <= 0) {
-            return callback();
-        }
-        var completed = 0;
-        var started = 0;
-        var running = 0;
+        var fn = _forEachLimit(limit);
+        fn.apply(null, [arr, iterator, callback]);
+    };
 
-        (function replenish () {
-            if (completed === arr.length) {
+    var _forEachLimit = function (limit) {
+
+        return function (arr, iterator, callback) {
+            callback = callback || function () {};
+            if (!arr.length || limit <= 0) {
                 return callback();
             }
+            var completed = 0;
+            var started = 0;
+            var running = 0;
 
-            while (running < limit && started < arr.length) {
-                started += 1;
-                running += 1;
-                iterator(arr[started - 1], function (err) {
-                    if (err) {
-                        callback(err);
-                        callback = function () {};
-                    }
-                    else {
-                        completed += 1;
-                        running -= 1;
-                        if (completed === arr.length) {
-                            callback();
+            (function replenish () {
+                if (completed >= arr.length) {
+                    return callback();
+                }
+
+                while (running < limit && started < arr.length) {
+                    started += 1;
+                    running += 1;
+                    iterator(arr[started - 1], function (err) {
+                        if (err) {
+                            callback(err);
+                            callback = function () {};
                         }
                         else {
-                            replenish();
+                            completed += 1;
+                            running -= 1;
+                            if (completed >= arr.length) {
+                                callback();
+                            }
+                            else {
+                                replenish();
+                            }
                         }
-                    }
-                });
-            }
-        })();
+                    });
+                }
+            })();
+        };
     };
 
 
@@ -568,6 +590,12 @@ require.define("/node_modules/async/lib/async.js",function(require,module,export
         return function () {
             var args = Array.prototype.slice.call(arguments);
             return fn.apply(null, [async.forEach].concat(args));
+        };
+    };
+    var doParallelLimit = function(limit, fn) {
+        return function () {
+            var args = Array.prototype.slice.call(arguments);
+            return fn.apply(null, [_forEachLimit(limit)].concat(args));
         };
     };
     var doSeries = function (fn) {
@@ -594,7 +622,13 @@ require.define("/node_modules/async/lib/async.js",function(require,module,export
     };
     async.map = doParallel(_asyncMap);
     async.mapSeries = doSeries(_asyncMap);
+    async.mapLimit = function (arr, limit, iterator, callback) {
+        return _mapLimit(limit)(arr, iterator, callback);
+    };
 
+    var _mapLimit = function(limit) {
+        return doParallelLimit(limit, _asyncMap);
+    };
 
     // reduce only has a series version, as doing reduce in parallel won't
     // work in many situations.
@@ -795,7 +829,7 @@ require.define("/node_modules/async/lib/async.js",function(require,module,export
                         args = args[0];
                     }
                     results[k] = args;
-                    taskComplete();
+                    async.nextTick(taskComplete);
                 }
             };
             var requires = task.slice(0, Math.abs(task.length - 1)) || [];
@@ -827,7 +861,7 @@ require.define("/node_modules/async/lib/async.js",function(require,module,export
         var wrapIterator = function (iterator) {
             return function (err) {
                 if (err) {
-                    callback(err);
+                    callback.apply(null, arguments);
                     callback = function () {};
                 }
                 else {
@@ -848,10 +882,10 @@ require.define("/node_modules/async/lib/async.js",function(require,module,export
         wrapIterator(async.iterator(tasks))();
     };
 
-    async.parallel = function (tasks, callback) {
+    var _parallel = function(eachfn, tasks, callback) {
         callback = callback || function () {};
         if (tasks.constructor === Array) {
-            async.map(tasks, function (fn, callback) {
+            eachfn.map(tasks, function (fn, callback) {
                 if (fn) {
                     fn(function (err) {
                         var args = Array.prototype.slice.call(arguments, 1);
@@ -865,7 +899,7 @@ require.define("/node_modules/async/lib/async.js",function(require,module,export
         }
         else {
             var results = {};
-            async.forEach(_keys(tasks), function (k, callback) {
+            eachfn.forEach(_keys(tasks), function (k, callback) {
                 tasks[k](function (err) {
                     var args = Array.prototype.slice.call(arguments, 1);
                     if (args.length <= 1) {
@@ -878,6 +912,14 @@ require.define("/node_modules/async/lib/async.js",function(require,module,export
                 callback(err, results);
             });
         }
+    };
+
+    async.parallel = function (tasks, callback) {
+        _parallel({ map: async.map, forEach: async.forEach }, tasks, callback);
+    };
+
+    async.parallelLimit = function(tasks, limit, callback) {
+        _parallel({ map: _mapLimit(limit), forEach: _forEachLimit(limit) }, tasks, callback);
     };
 
     async.series = function (tasks, callback) {
@@ -953,30 +995,94 @@ require.define("/node_modules/async/lib/async.js",function(require,module,export
 
     async.whilst = function (test, iterator, callback) {
         if (test()) {
+            var sync = true;
             iterator(function (err) {
                 if (err) {
                     return callback(err);
                 }
-                async.whilst(test, iterator, callback);
+                if (sync) {
+                    async.nextTick(function () {
+                        async.whilst(test, iterator, callback);
+                    });
+                }
+                else {
+                    async.whilst(test, iterator, callback);
+                }
             });
+            sync = false;
         }
         else {
             callback();
         }
     };
 
+    async.doWhilst = function (iterator, test, callback) {
+        var sync = true;
+        iterator(function (err) {
+            if (err) {
+                return callback(err);
+            }
+            if (test()) {
+                if (sync) {
+                    async.nextTick(function () {
+                        async.doWhilst(iterator, test, callback);
+                    });
+                }
+                else {
+                    async.doWhilst(iterator, test, callback);
+                }
+            }
+            else {
+                callback();
+            }
+        });
+        sync = false;
+    };
+
     async.until = function (test, iterator, callback) {
         if (!test()) {
+            var sync = true;
             iterator(function (err) {
                 if (err) {
                     return callback(err);
                 }
-                async.until(test, iterator, callback);
+                if (sync) {
+                    async.nextTick(function () {
+                        async.until(test, iterator, callback);
+                    });
+                }
+                else {
+                    async.until(test, iterator, callback);
+                }
             });
+            sync = false;
         }
         else {
             callback();
         }
+    };
+
+    async.doUntil = function (iterator, test, callback) {
+        var sync = true;
+        iterator(function (err) {
+            if (err) {
+                return callback(err);
+            }
+            if (!test()) {
+                if (sync) {
+                    async.nextTick(function () {
+                        async.doUntil(iterator, test, callback);
+                    });
+                }
+                else {
+                    async.doUntil(iterator, test, callback);
+                }
+            }
+            else {
+                callback();
+            }
+        });
+        sync = false;
     };
 
     async.queue = function (worker, concurrency) {
@@ -996,7 +1102,7 @@ require.define("/node_modules/async/lib/async.js",function(require,module,export
                         data: task,
                         callback: typeof callback === 'function' ? callback : null
                     });
-                    if (q.saturated && q.tasks.length == concurrency) {
+                    if (q.saturated && q.tasks.length === concurrency) {
                         q.saturated();
                     }
                     async.nextTick(q.process);
@@ -1005,16 +1111,33 @@ require.define("/node_modules/async/lib/async.js",function(require,module,export
             process: function () {
                 if (workers < q.concurrency && q.tasks.length) {
                     var task = q.tasks.shift();
-                    if(q.empty && q.tasks.length == 0) q.empty();
+                    if (q.empty && q.tasks.length === 0) {
+                        q.empty();
+                    }
                     workers += 1;
-                    worker(task.data, function () {
+                    var sync = true;
+                    var next = function () {
                         workers -= 1;
                         if (task.callback) {
                             task.callback.apply(task, arguments);
                         }
-                        if(q.drain && q.tasks.length + workers == 0) q.drain();
+                        if (q.drain && q.tasks.length + workers === 0) {
+                            q.drain();
+                        }
                         q.process();
+                    };
+                    var cb = only_once(function () {
+                        if (sync) {
+                            async.nextTick(function () {
+                                next.apply(null, arguments);
+                            });
+                        }
+                        else {
+                            next.apply(null, arguments);
+                        }
                     });
+                    worker(task.data, cb);
+                    sync = false;
                 }
             },
             length: function () {
@@ -1025,6 +1148,71 @@ require.define("/node_modules/async/lib/async.js",function(require,module,export
             }
         };
         return q;
+    };
+
+    async.cargo = function (worker, payload) {
+        var working     = false,
+            tasks       = [];
+
+        var cargo = {
+            tasks: tasks,
+            payload: payload,
+            saturated: null,
+            empty: null,
+            drain: null,
+            push: function (data, callback) {
+                if(data.constructor !== Array) {
+                    data = [data];
+                }
+                _forEach(data, function(task) {
+                    tasks.push({
+                        data: task,
+                        callback: typeof callback === 'function' ? callback : null
+                    });
+                    if (cargo.saturated && tasks.length === payload) {
+                        cargo.saturated();
+                    }
+                });
+                async.nextTick(cargo.process);
+            },
+            process: function process() {
+                if (working) return;
+                if (tasks.length === 0) {
+                    if(cargo.drain) cargo.drain();
+                    return;
+                }
+
+                var ts = typeof payload === 'number'
+                            ? tasks.splice(0, payload)
+                            : tasks.splice(0);
+
+                var ds = _map(ts, function (task) {
+                    return task.data;
+                });
+
+                if(cargo.empty) cargo.empty();
+                working = true;
+                worker(ds, function () {
+                    working = false;
+
+                    var args = arguments;
+                    _forEach(ts, function (data) {
+                        if (data.callback) {
+                            data.callback.apply(null, args);
+                        }
+                    });
+
+                    process();
+                });
+            },
+            length: function () {
+                return tasks.length;
+            },
+            running: function () {
+                return working;
+            }
+        };
+        return cargo;
     };
 
     var _console_fn = function (name) {
@@ -1081,6 +1269,7 @@ require.define("/node_modules/async/lib/async.js",function(require,module,export
                 }]));
             }
         };
+        memoized.memo = memo;
         memoized.unmemoized = fn;
         return memoized;
     };
@@ -1090,6 +1279,38 @@ require.define("/node_modules/async/lib/async.js",function(require,module,export
         return (fn.unmemoized || fn).apply(null, arguments);
       };
     };
+
+    async.times = function (count, iterator, callback) {
+        var counter = [];
+        for (var i = 0; i < count; i++) {
+            counter.push(i);
+        }
+        return async.map(counter, iterator, callback);
+    };
+
+    async.timesSeries = function (count, iterator, callback) {
+        var counter = [];
+        for (var i = 0; i < count; i++) {
+            counter.push(i);
+        }
+        return async.mapSeries(counter, iterator, callback);
+    };
+
+
+    // AMD / RequireJS
+    if (typeof define !== 'undefined' && define.amd) {
+        define([], function () {
+            return async;
+        });
+    }
+    // Node.js
+    else if (typeof module !== 'undefined' && module.exports) {
+        module.exports = async;
+    }
+    // included directly via <script> tag
+    else {
+        root.async = async;
+    }
 
 }());
 
@@ -4649,25 +4870,10 @@ function objEquiv (a, b) {
 
 });
 
-require.define("/node_modules/imacros-read-file/package.json",function(require,module,exports,__dirname,__filename,process,global){module.exports = {"main":"index.js"}
+require.define("/docparse/scrapers/imacros/fetch/package.json",function(require,module,exports,__dirname,__filename,process,global){module.exports = {"main":"index.js"}
 });
 
-require.define("/node_modules/imacros-read-file/index.js",function(require,module,exports,__dirname,__filename,process,global){module.exports = function readFile(filePath, cb) {
-  var txtFile = new XMLHttpRequest();
-  txtFile.open("GET", filePath, true);
-  txtFile.onreadystatechange = function() {
-    if (txtFile.readyState == 4) {
-      var text = txtFile.responseText;
-      return cb(null, text);
-    }
-  }
-  txtFile.send(null)
-}
-
-// file:///users/noah/Downloads/dummy.txt
-});
-
-require.define("/index.js",function(require,module,exports,__dirname,__filename,process,global){/**
+require.define("/docparse/scrapers/imacros/fetch/index.js",function(require,module,exports,__dirname,__filename,process,global){/**
  * Get a list of existing bills from the DocParse api server
  */
 function validateData(data, cb) {
@@ -4697,11 +4903,10 @@ function validateData(data, cb) {
 }
 function getURL(data) {
   var config = data.config;
-  var queryString = 'hash=' + encodeURIComponent(data.hash)
-  iimDisplay('built query string: ' +queryString)
+  var hash = data.hash;
   var url = 'http://'+config.pdfer.username + ':' + config.pdfer.password
         + '@'+config.pdfer.host + ':'+config.pdfer.port
-        + '/api/fetch?' + queryString;
+        + '/api/fetch/' + hash;
   return url;
 }
 function parseResponse(request, cb) {
@@ -4711,18 +4916,18 @@ function parseResponse(request, cb) {
     return cb('error fetching pdfer data, body: "Unauthorized"');
   }
 
-  var responseData = JSON.parse(body);
+  var resData = JSON.parse(body);
   var statusCode = request.status;
   if (statusCode !== 200) {
     iimDisplay('fetch failed, bad status code: ' + statusCode);
     return cb('error fetching data for hash, bad status code: ' + statusCode);
   }
-  if (!responseData.hasOwnProperty('text_pages')) {
+  if (!resData.hasOwnProperty('text_pages')) {
     iimDisplay('fetch reply missing "text_pages" field');
     return cb('fetch reply missing "text_pages" property');
   }
-  iimDisplay('fetch complete with result: ' + JSON.stringify(responseData.download));
-  cb(null, responseData);
+  iimDisplay('fetch complete with result: ' + JSON.stringify(resData.download));
+  cb(null, resData);
 }
 
 module.exports = function(data, cb) {
@@ -4747,11 +4952,29 @@ module.exports = function(data, cb) {
     iimDisplay('parsing fetch response: ' + request.response);
     parseResponse(request, cb);
   });
-}
+};
 
 });
 
-require.define("/test/fetch-test.js",function(require,module,exports,__dirname,__filename,process,global){var async = require('async');
+require.define("/docparse/scrapers/imacros/fetch/node_modules/imacros-read-file/package.json",function(require,module,exports,__dirname,__filename,process,global){module.exports = {"main":"index.js"}
+});
+
+require.define("/docparse/scrapers/imacros/fetch/node_modules/imacros-read-file/index.js",function(require,module,exports,__dirname,__filename,process,global){module.exports = function readFile(filePath, cb) {
+  var txtFile = new XMLHttpRequest();
+  txtFile.open("GET", filePath, true);
+  txtFile.onreadystatechange = function() {
+    if (txtFile.readyState == 4) {
+      var text = txtFile.responseText;
+      return cb(null, text);
+    }
+  }
+  txtFile.send(null)
+}
+
+// file:///users/noah/Downloads/dummy.txt
+});
+
+require.define("/docparse/scrapers/imacros/fetch/test/fetch-test.js",function(require,module,exports,__dirname,__filename,process,global){var async = require('async');
 var should = require('should');
 var fetch = require('../index');
 var readFile = require('imacros-read-file');
@@ -4764,17 +4987,13 @@ runTests(function (err, reply) {
 });
 
 function runTests(cb) {
-  var filePath = 'file:///users/noah/src/node/docparse-scraper-skeleton/docparse-imacros/docparse-fetch-imacros/test/localConfig.json'
+  var filePath = 'file:///users/noah/src/node/docparse/scrapers/imacros/fetch/test/localConfig.json';
   loadConfigFile(filePath, function (err, config) {
-    should.not.exist(err, 'error loading config file')
-    async.series([
-      function (cb) {
-        fetchExistingDocument(config, cb);
-      },
-      function (cb) {
-        fetchNullDocument(config, cb);
-      },
-    ], cb)
+    should.not.exist(err, 'error loading config file');
+    fetchExistingDocument(config, function (err, reply) {
+      if (err) { return cb(err); }
+      fetchNullDocument(config, cb);
+    });
   });
 }
 
@@ -4784,7 +5003,7 @@ function fetchExistingDocument(config, cb) {
   var data = {
     config: config,
     hash: hash
-  }
+  };
   fetch(data, function (err, reply) {
     if (err) { return cb(err); }
     if (!reply.text_pages) {
@@ -4800,7 +5019,7 @@ function fetchNullDocument(config, cb) {
   var data = {
     config: config,
     hash: hash
-  }
+  };
   fetch(data, function (err, reply) {
     if (!err) {
       return cb('fetch api request did not through an error for an invalid hash value like it should have');
@@ -4818,5 +5037,5 @@ function loadConfigFile(filePath, cb) {
 }
 
 });
-require("/test/fetch-test.js");
+require("/docparse/scrapers/imacros/fetch/test/fetch-test.js");
 })();
