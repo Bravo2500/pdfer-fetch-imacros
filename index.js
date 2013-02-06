@@ -28,8 +28,8 @@ function validateData(data, cb) {
 }
 function getURL(data) {
   var config = data.config;
-  var queryString = 'hash=' + encodeURIComponent(data.hash)
-  iimDisplay('built query string: ' +queryString)
+  var queryString = 'hash=' + encodeURIComponent(data.hash);
+  iimDisplay('built query string: ' +queryString);
   var url = 'http://'+config.pdfer.username + ':' + config.pdfer.password
         + '@'+config.pdfer.host + ':'+config.pdfer.port
         + '/api/fetch?' + queryString;
