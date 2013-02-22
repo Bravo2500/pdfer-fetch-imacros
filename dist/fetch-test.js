@@ -4870,61 +4870,47 @@ function objEquiv (a, b) {
 
 });
 
-require.define("/docparse/scrapers/imacros/fetch/package.json",function(require,module,exports,__dirname,__filename,process,global){module.exports = {"main":"index.js"}
+require.define("/docparse/scrapers/imacros/pdfer/fetch/package.json",function(require,module,exports,__dirname,__filename,process,global){module.exports = {"main":"index.js"}
 });
 
-require.define("/docparse/scrapers/imacros/fetch/index.js",function(require,module,exports,__dirname,__filename,process,global){/**
+require.define("/docparse/scrapers/imacros/pdfer/fetch/index.js",function(require,module,exports,__dirname,__filename,process,global){/**
  * Get a list of existing bills from the DocParse api server
  */
-function validateData(data, cb) {
-  if (!data.hash) {
-    return cb('"hash" Field missing from data parameter');
-  }
-
-  if (!data.config) {
-    return cb('"config" field missing from data parameter');
-  }
-  if (!data.config.pdfer) {
-    return cb('"pdfer" field missing from data.config parameter');
-  }
-  if (!data.config.pdfer.username) {
-    return cb('"username" field missing from data.config.pdfer parameter');
-  }
-  if (!data.config.pdfer.password) {
-    return cb('"password" field missing from data.config.pdfer parameter');
-  }
-  if (!data.config.pdfer.host) {
-    return cb('"host" field missing from data.config.pdfer parameter');
-  }
-  if (!data.config.pdfer.port) {
-    return cb('"port" field missing from data.config.pdfer parameter');
-  }
-  cb();
-}
 function getURL(data) {
   var config = data.config;
   var hash = data.hash;
-  var url = 'http://'+config.pdfer.username + ':' + config.pdfer.password
+  var email = config.pdfer.email
+  email = encodeURIComponent(email);
+  apiKey = encodeURIComponent(apiKey);
+  var apiKey = config.pdfer.apiKey
+  var url = 'http://'+ email + ':' + apiKey
         + '@'+config.pdfer.host + ':'+config.pdfer.port
         + '/api/fetch/' + hash;
   return url;
 }
 function parseResponse(request, cb) {
+  var resData;
   var body = request.response;
   if (body === 'Unauthorized') {
     iimDisplay('fetch failed, "Unauthorized"');
     return cb('error fetching pdfer data, body: "Unauthorized"');
   }
 
-  var resData = JSON.parse(body);
+  try {
+    resData = JSON.parse(body);
+  }
+  catch(err) {
+    iimDisplay('error parsing pdfer fetch repsonse: ' + JSON.stringify(err, null, ' '));
+    return cb(err);
+  }
   var statusCode = request.status;
   if (statusCode !== 200) {
     iimDisplay('fetch failed, bad status code: ' + statusCode);
     return cb('error fetching data for hash, bad status code: ' + statusCode);
   }
-  if (!resData.hasOwnProperty('text_pages')) {
-    iimDisplay('fetch reply missing "text_pages" field');
-    return cb('fetch reply missing "text_pages" property');
+  if (!resData.hasOwnProperty('textPages')) {
+    iimDisplay('fetch reply missing "textPages" field');
+    return cb('fetch reply missing "textPages" property');
   }
   iimDisplay('fetch complete with result: ' + JSON.stringify(resData.download));
   cb(null, resData);
@@ -4932,34 +4918,25 @@ function parseResponse(request, cb) {
 
 module.exports = function(data, cb) {
   iimDisplay('validating fetch data');
-  validateData(data, function (err, reply) {
-    if (err) { return cb(err); }
-    iimDisplay('fetch data validated');
-    if (!cb) {
-      iimDisplay('no callback supplied to fetch data');
-      alert('no callback supplied to fetch data');
-      return;
-    }
-    iimDisplay('getting url');
-    var url = getURL(data);
-    iimDisplay('got url: ' + url);
-    var request = new XMLHttpRequest();
-    var async = false;
-    request.open('GET', url, async);
-    request.send();
-    // because of "false" above, will block until the request is done and status
-    // is available. Not recommended, however it works for simple cases.
-    iimDisplay('parsing fetch response: ' + request.response);
-    parseResponse(request, cb);
-  });
+  iimDisplay('getting url');
+  var url = getURL(data);
+  iimDisplay('got url: ' + url);
+  var request = new XMLHttpRequest();
+  var async = false;
+  request.open('GET', url, async);
+  request.send();
+  // because of "false" above, will block until the request is done and status
+  // is available. Not recommended, however it works for simple cases.
+  iimDisplay('parsing fetch response: ' + request.response);
+  parseResponse(request, cb);
 };
 
 });
 
-require.define("/docparse/scrapers/imacros/fetch/node_modules/imacros-read-file/package.json",function(require,module,exports,__dirname,__filename,process,global){module.exports = {"main":"index.js"}
+require.define("/docparse/scrapers/imacros/pdfer/fetch/node_modules/imacros-read-file/package.json",function(require,module,exports,__dirname,__filename,process,global){module.exports = {"main":"index.js"}
 });
 
-require.define("/docparse/scrapers/imacros/fetch/node_modules/imacros-read-file/index.js",function(require,module,exports,__dirname,__filename,process,global){module.exports = function readFile(filePath, cb) {
+require.define("/docparse/scrapers/imacros/pdfer/fetch/node_modules/imacros-read-file/index.js",function(require,module,exports,__dirname,__filename,process,global){module.exports = function readFile(filePath, cb) {
   var txtFile = new XMLHttpRequest();
   txtFile.open("GET", filePath, true);
   txtFile.onreadystatechange = function() {
@@ -4974,68 +4951,69 @@ require.define("/docparse/scrapers/imacros/fetch/node_modules/imacros-read-file/
 // file:///users/noah/Downloads/dummy.txt
 });
 
-require.define("/docparse/scrapers/imacros/fetch/test/fetch-test.js",function(require,module,exports,__dirname,__filename,process,global){var async = require('async');
-var should = require('should');
-var fetch = require('../index');
-var readFile = require('imacros-read-file');
+require.define("/docparse/scrapers/imacros/pdfer/fetch/test/fetch-test.js",function(require,module,exports,__dirname,__filename,process,global){var async = require('async')
+var should = require('should')
+var fetch = require('../index')
+var readFile = require('imacros-read-file')
 runTests(function (err, reply) {
   if (err) {
-    alert('check test suite fails with error: ' + JSON.stringify(err));
-    return false;
+    alert('check test suite fails with error: ' + JSON.stringify(err))
+    return false
   }
-  iimDisplay('Success! Checks test suite passes');
-});
+  iimDisplay('Success! Checks test suite passes')
+})
 
 function runTests(cb) {
-  var filePath = 'file:///users/noah/src/node/docparse/scrapers/imacros/fetch/test/localConfig.json';
+  var filePath = 'file:///users/noah/src/node/docparse/scrapers/imacros/pdfer/fetch/test/config.json'
   loadConfigFile(filePath, function (err, config) {
-    should.not.exist(err, 'error loading config file');
+    should.not.exist(err, 'error loading config file')
     fetchExistingDocument(config, function (err, reply) {
-      if (err) { return cb(err); }
-      fetchNullDocument(config, cb);
-    });
-  });
+      if (err) { return cb(err) }
+      fetchNullDocument(config, cb)
+    })
+  })
 }
 
 function fetchExistingDocument(config, cb) {
-  iimDisplay('fetching existing document');
-  var hash = '030f4f991961031d959dc1a9b077b0452e646dd7';
+  iimDisplay('fetching existing document')
+  var hash = '451457081c9996c7586049289751d4be082678dc';
   var data = {
     config: config,
     hash: hash
-  };
+  }
   fetch(data, function (err, reply) {
-    if (err) { return cb(err); }
-    if (!reply.text_pages) {
-      return cb('"text_pages" field missing in fetch response from pdfer api');
+    if (err) { return cb(err) }
+    if (!reply.textPages) {
+      return cb('"textPages" field missing in fetch response from pdfer api')
     }
-    cb();
-  });
+    cb()
+  })
 }
 
 function fetchNullDocument(config, cb) {
-  iimDisplay('fetching null document');
-  var hash = 'dummy hash value here';
+  iimDisplay('fetching null document')
+  var hash = 'dummy hash value here'
   var data = {
     config: config,
     hash: hash
-  };
+  }
   fetch(data, function (err, reply) {
     if (!err) {
-      return cb('fetch api request did not through an error for an invalid hash value like it should have');
+      return cb('fetch api request did not through an error for an invalid hash value like it should have')
     }
-    cb();
-  });
+    iimDisplay('fetch null document test passes');
+    cb()
+  })
 }
 
 function loadConfigFile(filePath, cb) {
   readFile(filePath, function (err, reply) {
-    if (err) { return cb(err); }
-    var data = JSON.parse(reply);
-    cb(null, data);
-  });
+    if (err) { return cb(err) }
+    var data = JSON.parse(reply)
+    cb(null, data)
+  })
 }
 
 });
-require("/docparse/scrapers/imacros/fetch/test/fetch-test.js");
+require("/docparse/scrapers/imacros/pdfer/fetch/test/fetch-test.js");
 })();
